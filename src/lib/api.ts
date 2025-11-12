@@ -1,5 +1,17 @@
 // API configuration and helper functions
-const API_BASE_URL = 'http://localhost:3000/api';
+// Get API base URL from environment variable or use localhost as default
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
+console.log('API Base URL:', API_BASE_URL);
+
+// Standard API response envelope
+interface ApiResponse<T = any> {
+  success: boolean;
+  message: string;
+  data: T;
+  timestamp: string;
+  errors?: any[];
+}
 
 // Get auth token from localStorage
 const getAuthToken = (): string | null => {
@@ -32,51 +44,119 @@ async function apiCall<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api${endpoint}`, {
+      ...options,
+      headers,
+    });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || `HTTP error! status: ${response.status}`);
+    const data: ApiResponse<T> = await response.json();
+
+    if (!response.ok || !data.success) {
+      // Handle specific error cases
+      if (response.status === 401) {
+        // Token expired or invalid - clear auth
+        removeAuthToken();
+        localStorage.removeItem('user');
+        throw new Error('Session expired. Please login again.');
+      }
+      
+      throw new Error(data.message || `HTTP error! status: ${response.status}`);
+    }
+
+    return data.data;
+  } catch (error) {
+    // Network errors (CORS, connection refused, etc.)
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      throw new Error(
+        'Cannot connect to backend. Please ensure:\n' +
+        '1. Your backend server is running\n' +
+        '2. CORS is configured correctly\n' +
+        '3. API URL is correct in environment variables'
+      );
+    }
+    throw error;
   }
-
-  return response.json();
 }
 
 // Auth APIs
 export const authAPI = {
   login: async (email: string, password: string) => {
-    const response = await apiCall<{ token: string; user: any }>('/auth/login', {
+    const response = await apiCall<{
+      uid: string;
+      email: string;
+      name: string;
+      idToken: string;
+      refreshToken: string;
+      expiresIn: string;
+      profile: any;
+    }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    if (response.token) {
-      setAuthToken(response.token);
+    
+    if (response.idToken) {
+      setAuthToken(response.idToken);
     }
-    return response;
+    
+    return {
+      token: response.idToken,
+      user: {
+        uid: response.uid,
+        email: response.email,
+        name: response.name,
+      },
+      profile: response.profile,
+    };
   },
 
   register: async (email: string, password: string, name: string) => {
-    const response = await apiCall<{ token: string; user: any }>('/auth/register', {
+    const response = await apiCall<{
+      uid: string;
+      email: string;
+      name: string;
+    }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ email, password, name }),
     });
-    if (response.token) {
-      setAuthToken(response.token);
-    }
-    return response;
+    
+    // After registration, automatically login
+    return await authAPI.login(email, password);
   },
 
-  logout: () => {
-    removeAuthToken();
+  logout: async () => {
+    try {
+      await apiCall('/auth/logout', { method: 'POST' });
+    } catch (error) {
+      // Even if logout fails, clear local data
+      console.error('Logout error:', error);
+    } finally {
+      removeAuthToken();
+      localStorage.removeItem('user');
+    }
   },
+
+  verify: () => apiCall<{
+    uid: string;
+    email: string;
+    emailVerified: boolean;
+    name: string;
+  }>('/auth/verify'),
 };
 
 // User APIs
 export const userAPI = {
-  getProfile: () => apiCall<any>('/user/profile'),
+  getProfile: () => apiCall<{
+    uid: string;
+    email: string;
+    name: string;
+    currency: string;
+    monthlyBudget: number;
+    savingsGoal: number;
+    preferences: any;
+    createdAt: string;
+    updatedAt: string;
+  }>('/user/profile'),
   
   updateProfile: (data: any) =>
     apiCall<any>('/user/profile', {
@@ -85,7 +165,13 @@ export const userAPI = {
     }),
 
   getBudget: (month: number, year: number) =>
-    apiCall<any>(`/user/budget?month=${month}&year=${year}`),
+    apiCall<{
+      monthlyBudget: number;
+      savingsGoal: number;
+      categoryBudgets: Record<string, number>;
+      month: number;
+      year: number;
+    }>(`/user/budget?month=${month}&year=${year}`),
 
   updateBudget: (data: any) =>
     apiCall<any>('/user/budget', {
@@ -104,14 +190,36 @@ export const userAPI = {
 
 // Transaction APIs
 export const transactionAPI = {
-  getAll: (params?: { type?: string; page?: number; limit?: number }) => {
+  getAll: (params?: { 
+    type?: string; 
+    page?: number; 
+    limit?: number;
+    startDate?: string;
+    endDate?: string;
+  }) => {
     const queryParams = new URLSearchParams();
     if (params?.type) queryParams.append('type', params.type);
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.startDate) queryParams.append('startDate', params.startDate);
+    if (params?.endDate) queryParams.append('endDate', params.endDate);
     
     const queryString = queryParams.toString();
-    return apiCall<any>(`/transactions${queryString ? `?${queryString}` : ''}`);
+    return apiCall<{
+      transactions: any[];
+      summary: {
+        totalIncome: number;
+        totalExpenses: number;
+        totalSavings: number;
+        count: number;
+      };
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+      };
+    }>(`/transactions${queryString ? `?${queryString}` : ''}`);
   },
 
   create: (data: any) =>
@@ -122,7 +230,7 @@ export const transactionAPI = {
 
   update: (id: string, data: any) =>
     apiCall<any>(`/transactions/${id}`, {
-      method: 'POST',
+      method: 'PUT',
       body: JSON.stringify(data),
     }),
 
@@ -132,11 +240,39 @@ export const transactionAPI = {
     }),
 };
 
-// Insights API (placeholder - to be implemented when backend is ready)
+// Insights API
 export const insightsAPI = {
-  getInsights: (message: string) =>
-    apiCall<any>('/insights', {
+  generate: (params?: { period?: string; categories?: string[] }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.period) queryParams.append('period', params.period);
+    if (params?.categories) queryParams.append('categories', params.categories.join(','));
+    
+    const queryString = queryParams.toString();
+    return apiCall<{
+      insights: any[];
+      generatedAt: string;
+    }>(`/insights/generate${queryString ? `?${queryString}` : ''}`);
+  },
+
+  chat: (message: string) =>
+    apiCall<{
+      response: string;
+      suggestions?: string[];
+    }>('/insights/chat', {
       method: 'POST',
       body: JSON.stringify({ message }),
     }),
+
+  getHistory: (params?: { page?: number; limit?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    
+    const queryString = queryParams.toString();
+    return apiCall<{
+      insights: any[];
+      pagination: any;
+    }>(`/insights/history${queryString ? `?${queryString}` : ''}`);
+  },
 };
+

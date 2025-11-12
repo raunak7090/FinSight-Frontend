@@ -35,7 +35,7 @@ export default function Profile() {
       });
     } catch (error) {
       console.error('Failed to fetch profile:', error);
-      toast.error('Failed to load profile');
+      toast.error(error instanceof Error ? error.message : 'Failed to load profile');
     }
   };
 

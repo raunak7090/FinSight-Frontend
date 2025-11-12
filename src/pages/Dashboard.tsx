@@ -27,34 +27,35 @@ export default function Dashboard() {
   const fetchDashboardData = async () => {
     try {
       // Fetch transactions
-      const transactions = await transactionAPI.getAll({ limit: 100 });
+      const transactionData = await transactionAPI.getAll({ limit: 100 });
       
-      // Calculate stats
-      let income = 0;
-      let expenses = 0;
-      const categoryMap: Record<string, number> = {};
+      // Use summary from API response
+      const summary = transactionData.summary || {
+        totalIncome: 0,
+        totalExpenses: 0,
+        totalSavings: 0,
+        count: 0,
+      };
 
-      transactions.transactions?.forEach((t: any) => {
-        if (t.type === 'income') {
-          income += t.amount;
-        } else {
-          expenses += t.amount;
+      // Fetch budget
+      const currentDate = new Date();
+      const budgetData = await userAPI.getBudget(currentDate.getMonth() + 1, currentDate.getFullYear());
+
+      setStats({
+        totalIncome: summary.totalIncome,
+        totalExpenses: summary.totalExpenses,
+        savings: summary.totalIncome - summary.totalExpenses,
+        budget: budgetData.monthlyBudget || 0,
+      });
+
+      // Prepare category chart data from transactions
+      const categoryMap: Record<string, number> = {};
+      transactionData.transactions?.forEach((t: any) => {
+        if (t.type === 'expense') {
           categoryMap[t.category] = (categoryMap[t.category] || 0) + t.amount;
         }
       });
 
-      // Fetch budget
-      const currentDate = new Date();
-      const budget = await userAPI.getBudget(currentDate.getMonth() + 1, currentDate.getFullYear());
-
-      setStats({
-        totalIncome: income,
-        totalExpenses: expenses,
-        savings: income - expenses,
-        budget: budget.monthlyBudget || 0,
-      });
-
-      // Prepare category chart data
       const categoryChartData = Object.entries(categoryMap).map(([category, amount]) => ({
         name: category,
         value: amount,
@@ -73,7 +74,7 @@ export default function Dashboard() {
       setMonthlyData(monthlyChartData);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
-      toast.error('Failed to load dashboard data');
+      toast.error(error instanceof Error ? error.message : 'Failed to load dashboard data');
     } finally {
       setIsLoading(false);
     }

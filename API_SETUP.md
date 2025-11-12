@@ -1,35 +1,49 @@
 # FinanceAI - API Setup Guide
 
-## API Endpoints Overview
+## ⚠️ Important: Backend Connection Required
 
-This frontend connects to your backend API running at `http://localhost:3000/api`. Make sure your backend server is running before using the application.
+This frontend is now fully integrated with your Firebase + Next.js backend. To use the app, you need to:
 
-### Authentication Endpoints
+1. **Run your backend server** (default: http://localhost:3000)
+2. **OR** deploy your backend and set `VITE_API_BASE_URL` environment variable
 
-**Login**
-- **URL:** `POST /api/auth/login`
-- **Body:**
+📖 **See `BACKEND_INTEGRATION.md` for complete setup instructions**
+
+---
+
+## API Response Format
+
+All API responses follow this envelope structure:
+
 ```json
 {
-  "email": "user@example.com",
-  "password": "securePassword123"
-}
-```
-- **Response:**
-```json
-{
-  "token": "jwt_token_here",
-  "user": {
-    "uid": "user_id",
-    "email": "user@example.com",
-    "name": "John Doe"
-  }
+  "success": true,
+  "message": "Human-friendly status message",
+  "data": {
+    // Actual response data here
+  },
+  "timestamp": "2025-11-12T19:48:45.532Z"
 }
 ```
 
-**Register**
-- **URL:** `POST /api/auth/register`
-- **Body:**
+Error responses:
+```json
+{
+  "success": false,
+  "message": "Error message",
+  "errors": [],
+  "timestamp": "2025-11-12T19:48:45.532Z"
+}
+```
+
+---
+
+## Authentication Flow
+
+### 1. Register User
+**Endpoint:** `POST /api/auth/register`
+
+**Request:**
 ```json
 {
   "email": "user@example.com",
@@ -38,54 +52,120 @@ This frontend connects to your backend API running at `http://localhost:3000/api
 }
 ```
 
-### User Profile Endpoints
-
-**Get Profile**
-- **URL:** `GET /api/user/profile`
-- **Headers:** `Authorization: Bearer {token}`
-
-**Update Profile**
-- **URL:** `PUT /api/user/profile`
-- **Headers:** `Authorization: Bearer {token}`
-- **Body:**
+**Response (201):**
 ```json
 {
-  "name": "Jane Doe",
-  "currency": "EUR"
+  "success": true,
+  "message": "User registered successfully",
+  "data": {
+    "uid": "nlILNDJtNDQkaOIIl8EYqk7owT73",
+    "email": "user@example.com",
+    "name": "John Doe"
+  },
+  "timestamp": "2025-11-12T19:48:45.532Z"
 }
 ```
 
-### Budget Endpoints
+### 2. Login
+**Endpoint:** `POST /api/auth/login`
 
-**Get Budget**
-- **URL:** `GET /api/user/budget?month={month}&year={year}`
-- **Headers:** `Authorization: Bearer {token}`
-
-**Update Budget**
-- **URL:** `POST /api/user/budget`
-- **Headers:** `Authorization: Bearer {token}`
-- **Body:**
+**Request:**
 ```json
 {
-  "monthlyBudget": 3000,
-  "savingsGoal": 15000,
-  "categoryBudgets": {
-    "Food": 500,
-    "Transport": 200
+  "email": "user@example.com",
+  "password": "securePassword123"
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "uid": "nlILNDJtNDQkaOIIl8EYqk7owT73",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "idToken": "eyJhbGciOiJSUzI1NiIs...",
+    "refreshToken": "AEu4Il2...",
+    "expiresIn": "3600",
+    "profile": {
+      "currency": "USD",
+      "monthlyBudget": 0,
+      "savingsGoal": 0,
+      "preferences": {
+        "notifications": true,
+        "theme": "light",
+        "language": "en"
+      }
+    }
+  },
+  "timestamp": "2025-11-12T19:22:27.025Z"
+}
+```
+
+### 3. Protected Routes
+Include the ID token in all protected requests:
+
+```
+Authorization: Bearer <ID_TOKEN>
+```
+
+---
+
+## Transaction Endpoints
+
+### List Transactions
+**Endpoint:** `GET /api/transactions`
+
+**Query Parameters:**
+- `type` - Filter by type: `income`, `expense`, or `savings`
+- `page` - Page number (default: 1)
+- `limit` - Items per page (default: 10)
+- `startDate` - Filter by start date (ISO 8601)
+- `endDate` - Filter by end date (ISO 8601)
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": {
+    "transactions": [
+      {
+        "id": "trans_001",
+        "userId": "nlILNDJtNDQkaOIIl8EYqk7owT73",
+        "type": "expense",
+        "amount": 42.5,
+        "category": "Food",
+        "description": "Lunch at cafe",
+        "date": "2025-01-12T12:15:00.000Z",
+        "tags": ["lunch", "eating out"],
+        "recurring": false,
+        "createdAt": "2025-01-12T12:20:30.100Z",
+        "updatedAt": "2025-01-12T12:20:30.100Z"
+      }
+    ],
+    "summary": {
+      "totalIncome": 2500,
+      "totalExpenses": 850,
+      "totalSavings": 200,
+      "count": 12
+    },
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 12,
+      "totalPages": 2
+    }
   }
 }
 ```
 
-### Transaction Endpoints
+### Create Transaction
+**Endpoint:** `POST /api/transactions`
 
-**Get All Transactions**
-- **URL:** `GET /api/transactions?type={type}&page={page}&limit={limit}`
-- **Headers:** `Authorization: Bearer {token}`
-
-**Create Transaction**
-- **URL:** `POST /api/transactions`
-- **Headers:** `Authorization: Bearer {token}`
-- **Body:**
+**Request:**
 ```json
 {
   "type": "expense",
@@ -98,56 +178,138 @@ This frontend connects to your backend API running at `http://localhost:3000/api
 }
 ```
 
-**Update Transaction**
-- **URL:** `POST /api/transactions/{id}`
-- **Headers:** `Authorization: Bearer {token}`
-- **Body:**
+### Update Transaction
+**Endpoint:** `PUT /api/transactions/{transactionId}`
+
+**Request (partial updates allowed):**
 ```json
 {
-  "amount": 55.00,
-  "description": "Updated description"
+  "amount": 55,
+  "description": "Updated lunch expense"
 }
 ```
 
-**Delete Transaction**
-- **URL:** `DELETE /api/transactions/{id}`
-- **Headers:** `Authorization: Bearer {token}`
+### Delete Transaction
+**Endpoint:** `DELETE /api/transactions/{transactionId}`
 
-### AI Insights Endpoint
+---
 
-**Get AI Insights**
-- **URL:** `POST /api/insights`
-- **Headers:** `Authorization: Bearer {token}`
-- **Body:**
+## User Profile & Budget
+
+### Get Profile
+**Endpoint:** `GET /api/user/profile`
+
+### Update Profile
+**Endpoint:** `PUT /api/user/profile`
+
+**Request:**
+```json
+{
+  "name": "Jane Doe",
+  "currency": "EUR"
+}
+```
+
+### Get Budget
+**Endpoint:** `GET /api/user/budget?month=1&year=2025`
+
+### Update Budget
+**Endpoint:** `POST /api/user/budget`
+
+**Request:**
+```json
+{
+  "monthlyBudget": 3000,
+  "savingsGoal": 15000,
+  "categoryBudgets": {
+    "Food": 500,
+    "Transport": 200
+  }
+}
+```
+
+---
+
+## AI Insights
+
+### Chat with AI
+**Endpoint:** `POST /api/insights/chat`
+
+**Request:**
 ```json
 {
   "message": "How can I reduce my expenses?"
 }
 ```
 
-## Configuration
-
-The API base URL is configured in `src/lib/api.ts`:
-
-```typescript
-const API_BASE_URL = 'http://localhost:3000/api';
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": {
+    "response": "Based on your spending patterns, I suggest...",
+    "suggestions": [
+      "Reduce dining out by 15%",
+      "Set up automatic savings transfers"
+    ]
+  }
+}
 ```
 
-Change this if your backend is hosted elsewhere.
+### Generate Insights
+**Endpoint:** `GET /api/insights/generate?period=month`
 
-## Authentication Flow
+---
 
-1. User logs in/registers
-2. Backend returns JWT token
-3. Token is stored in localStorage
-4. All subsequent requests include the token in Authorization header
-5. On logout, token is removed from localStorage
+## Environment Configuration
 
-## Error Handling
+Create `.env` file in project root:
 
-The application includes toast notifications for:
-- Successful operations (green)
-- Errors and failures (red)
-- Loading states with spinners
+```env
+VITE_API_BASE_URL=http://localhost:3000
+```
 
-All API calls are wrapped with try-catch blocks and user-friendly error messages.
+For production:
+```env
+VITE_API_BASE_URL=https://your-backend.vercel.app
+```
+
+---
+
+## Error Codes
+
+| Code | Meaning | Action |
+|------|---------|--------|
+| 400 | Bad Request | Check request format |
+| 401 | Unauthorized | Re-login required |
+| 403 | Forbidden | Access denied |
+| 404 | Not Found | Resource doesn't exist |
+| 500 | Server Error | Contact support |
+
+---
+
+## Testing with cURL
+
+```bash
+# Register
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"test123","name":"Test User"}'
+
+# Login
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"test123"}'
+
+# Get Profile (use token from login response)
+curl http://localhost:3000/api/user/profile \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+---
+
+📚 **For detailed setup instructions, see:**
+- `BACKEND_INTEGRATION.md` - Complete integration guide
+- `API_CONNECTION_GUIDE.md` - Troubleshooting & deployment
+

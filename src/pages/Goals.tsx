@@ -44,7 +44,7 @@ export default function Goals() {
       });
     } catch (error) {
       console.error('Failed to fetch budget:', error);
-      toast.error('Failed to load budget data');
+      toast.error(error instanceof Error ? error.message : 'Failed to load budget data');
     }
   };
 

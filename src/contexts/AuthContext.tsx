@@ -68,11 +68,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = () => {
-    authAPI.logout();
-    setUser(null);
-    localStorage.removeItem('user');
-    toast.success('Logged out successfully');
+  const logout = async () => {
+    try {
+      await authAPI.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+      localStorage.removeItem('user');
+      toast.success('Logged out successfully');
+    }
   };
 
   return (

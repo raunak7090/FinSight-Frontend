@@ -50,15 +50,16 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
     setIsLoading(true);
 
     try {
-      const response = await insightsAPI.getInsights(input);
+      const response = await insightsAPI.chat(input);
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: response.message || 'I can help you with financial insights, budgeting advice, and transaction analysis.',
+        content: response.response || 'I can help you with financial insights, budgeting advice, and transaction analysis.',
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
-      toast.error('Failed to get AI insights. Using demo response.');
+      console.error('Failed to get AI insights:', error);
+      toast.error('Unable to connect to AI service');
       // Demo response if API is not ready
       const demoMessage: Message = {
         id: (Date.now() + 1).toString(),

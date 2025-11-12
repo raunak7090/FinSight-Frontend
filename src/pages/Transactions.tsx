@@ -48,7 +48,7 @@ export default function Transactions() {
       setTransactions(data.transactions || []);
     } catch (error) {
       console.error('Failed to fetch transactions:', error);
-      toast.error('Failed to load transactions');
+      toast.error(error instanceof Error ? error.message : 'Failed to load transactions');
     } finally {
       setIsLoading(false);
     }
