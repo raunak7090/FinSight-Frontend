@@ -4,8 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { insightsAPI } from '@/lib/api';
+import { aiAPI, type AIConversationEntry } from '@/lib/api';
 import toast from 'react-hot-toast';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Message {
   id: string;
@@ -19,13 +21,14 @@ interface ChatbotModalProps {
 }
 
 export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: "Hello! I'm your AI financial advisor. How can I help you manage your finances better today?",
-    },
-  ]);
+  const introMessage: Message = {
+    id: 'intro',
+    role: 'assistant',
+    content: "Hello! I'm your AI financial advisor. How can I help you manage your finances better today?",
+  };
+
+  const [messages, setMessages] = useState<Message[]>([introMessage]);
+  const [conversationHistory, setConversationHistory] = useState<AIConversationEntry[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -50,23 +53,26 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
     setIsLoading(true);
 
     try {
-      const response = await insightsAPI.chat(input);
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response.response || 'I can help you with financial insights, budgeting advice, and transaction analysis.',
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
+      const response = await aiAPI.chat({
+        message: userMessage.content,
+        conversationHistory,
+      });
+
+      const updatedHistory = response.conversationHistory ?? [];
+      setConversationHistory(updatedHistory);
+
+      const mappedMessages: Message[] = updatedHistory.map((entry, index) => ({
+        id: entry.timestamp ? `${entry.timestamp}-${index}` : `${Date.now()}-${index}`,
+        role: entry.role,
+        content: entry.content,
+      }));
+
+      setMessages([introMessage, ...mappedMessages]);
     } catch (error) {
       console.error('Failed to get AI insights:', error);
       toast.error('Unable to connect to AI service');
-      // Demo response if API is not ready
-      const demoMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: "Based on your spending patterns, I suggest allocating more budget to savings and reducing dining expenses by 15%. Would you like me to create a detailed budget plan?",
-      };
-      setMessages((prev) => [...prev, demoMessage]);
+      setMessages((prev) => prev.filter((message) => message.id !== userMessage.id));
+      setInput(userMessage.content);
     } finally {
       setIsLoading(false);
     }
@@ -88,7 +94,7 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
             animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
             exit={{ opacity: 0, x: 400, y: 400, scale: 0.5 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="fixed bottom-6 right-6 w-[400px] h-[600px] bg-card rounded-2xl shadow-glow border border-border z-50 flex flex-col"
+            className="fixed bottom-6 right-6 w-[460px] h-[680px] bg-card rounded-2xl shadow-glow border border-border z-50 flex flex-col"
           >
             <div className="p-4 border-b border-border flex items-center justify-between bg-gradient-primary rounded-t-2xl">
               <div className="flex items-center gap-2">
@@ -110,7 +116,7 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
               </Button>
             </div>
 
-            <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+            <ScrollArea className="flex-1 p-6" ref={scrollRef}>
               <div className="space-y-4">
                 {messages.map((message) => (
                   <motion.div
@@ -126,7 +132,16 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
                           : 'bg-muted text-foreground'
                       }`}
                     >
-                      <p className="text-sm">{message.content}</p>
+                      {message.role === 'assistant' ? (
+                        <ReactMarkdown
+                          
+                          className="prose prose-sm max-w-none text-foreground dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-li:marker:text-muted-foreground"
+                        >
+                          {message.content}
+                        </ReactMarkdown>
+                      ) : (
+                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      )}
                     </div>
                   </motion.div>
                 ))}

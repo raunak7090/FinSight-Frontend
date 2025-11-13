@@ -284,3 +284,21 @@ export const insightsAPI = {
   },
 };
 
+export type AIConversationEntry = {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: string;
+};
+
+export const aiAPI = {
+  chat: (payload: { message: string; conversationHistory: AIConversationEntry[] }) =>
+    apiCall<{
+      message: string;
+      conversationHistory: AIConversationEntry[];
+      timestamp?: string;
+    }>('/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+};
+

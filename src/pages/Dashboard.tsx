@@ -249,6 +249,7 @@ export default function Dashboard() {
             title="Monthly Budget"
             value={formatCurrency(stats.budget)}
             icon={Target}
+            trend={{ value: '0%', isPositive: true }}
           />
         </div>
 
