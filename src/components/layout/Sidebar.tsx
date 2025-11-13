@@ -23,7 +23,7 @@ export function Sidebar() {
     >
       <div className="p-6 border-b border-sidebar-border">
         <h1 className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-          FinanceAI
+          FinSight
         </h1>
         <p className="text-sm text-muted-foreground mt-1">Smart Money Management</p>
       </div>

@@ -1,4 +1,4 @@
-# FinanceAI - API Setup Guide
+# FinSight - API Setup Guide
 
 ## ⚠️ Important: Backend Connection Required
 

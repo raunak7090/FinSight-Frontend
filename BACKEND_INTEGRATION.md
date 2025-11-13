@@ -93,8 +93,8 @@ vercel deploy
 # Get URL: https://your-app.vercel.app
 ```
 
-2. **Set environment variable in Lovable:**
-   - Go to your project settings
+2. **Set environment variable:**
+   - Update your deployment settings or local environment configuration
    - Add: `VITE_API_BASE_URL=https://your-app.vercel.app`
    - Or create `.env` file locally:
 ```env
@@ -105,7 +105,7 @@ VITE_API_BASE_URL=https://your-app.vercel.app
 ```javascript
 // Add to your backend API middleware
 const allowedOrigins = [
-  'https://bd2cc4d3-b43a-441b-96ce-cb5e7f143c42.lovableproject.com',
+  'https://your-frontend-domain.com',
   'http://localhost:8080'
 ];
 ```

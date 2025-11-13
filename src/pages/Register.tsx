@@ -40,7 +40,7 @@ export default function Register() {
       >
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-2">
-            FinanceAI
+            FinSight
           </h1>
           <p className="text-muted-foreground">Start managing your finances smarter</p>
         </div>
@@ -48,7 +48,7 @@ export default function Register() {
         <Card className="shadow-card">
           <CardHeader>
             <CardTitle>Create an account</CardTitle>
-            <CardDescription>Sign up to get started with FinanceAI</CardDescription>
+            <CardDescription>Sign up to get started with FinSight</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">

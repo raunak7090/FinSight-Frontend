@@ -191,6 +191,14 @@ export default function Dashboard() {
     }).format(amount);
   };
 
+  const formatAxisValue = (value: number) => {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: value >= 1000 ? 0 : 2,
+    }).format(value);
+  };
+
   if (isLoading) {
     return (
       <DashboardLayout>
@@ -264,8 +272,12 @@ export default function Dashboard() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={monthlyData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" hide={monthlyData.length > 12} \/>
-                    <YAxis stroke="hsl(var(--muted-foreground))" />
+                    <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" hide={monthlyData.length > 12} />
+                    <YAxis
+                      stroke="hsl(var(--muted-foreground))"
+                      tickFormatter={formatAxisValue}
+                      allowDecimals={false}
+                    />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: 'hsl(var(--card))',

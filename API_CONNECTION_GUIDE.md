@@ -51,9 +51,9 @@ vercel deploy
 # Will give you a URL like: https://your-app.vercel.app
 ```
 
-### Step 2: Update API URL in Lovable
+### Step 2: Update API URL
 
-Create a `.env` file in your project root (or update environment variables in Lovable):
+Create a `.env` file in your project root (or update environment variables in your hosting platform):
 
 ```env
 VITE_API_BASE_URL=https://your-app.vercel.app
@@ -61,12 +61,12 @@ VITE_API_BASE_URL=https://your-app.vercel.app
 
 ### Step 3: Configure CORS on Backend
 
-Make sure your backend accepts requests from your Lovable domain:
+Make sure your backend accepts requests from your frontend domain:
 
 ```javascript
 // In your Next.js API middleware or next.config.js
 const allowedOrigins = [
-  'https://bd2cc4d3-b43a-441b-96ce-cb5e7f143c42.lovableproject.com',
+  'https://your-frontend-domain.com',
   'http://localhost:8080', // for local development
 ];
 

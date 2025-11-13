@@ -39,7 +39,7 @@ export default function Login() {
       >
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-2">
-            FinanceAI
+            FinSight
           </h1>
           <p className="text-muted-foreground">Manage your finances with AI-powered insights</p>
         </div>
