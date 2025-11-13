@@ -166,11 +166,25 @@ export const userAPI = {
 
   getBudget: (month: number, year: number) =>
     apiCall<{
-      monthlyBudget: number;
-      savingsGoal: number;
-      categoryBudgets: Record<string, number>;
-      month: number;
-      year: number;
+      period: {
+        month: number;
+        year: number;
+        daysRemaining: number;
+      };
+      budget: {
+        monthly: number;
+        spent: number;
+        remaining: number;
+        percentageUsed: number;
+        dailyBudget: number;
+        status: string;
+        savingsGoal?: number;
+      };
+      categoryBreakdown: Array<{
+        category: string;
+        amount: number;
+        percentage: string;
+      }>;
     }>(`/user/budget?month=${month}&year=${year}`),
 
   updateBudget: (data: any) =>
@@ -242,17 +256,11 @@ export const transactionAPI = {
 
 // Insights API
 export const insightsAPI = {
-  generate: (params?: { period?: string; categories?: string[] }) => {
-    const queryParams = new URLSearchParams();
-    if (params?.period) queryParams.append('period', params.period);
-    if (params?.categories) queryParams.append('categories', params.categories.join(','));
-    
-    const queryString = queryParams.toString();
-    return apiCall<{
-      insights: any[];
-      generatedAt: string;
-    }>(`/insights/generate${queryString ? `?${queryString}` : ''}`);
-  },
+  analyze: (payload?: { transactions?: any[]; period?: string }) =>
+    apiCall<any>('/insights/analyze', {
+      method: 'POST',
+      body: JSON.stringify(payload ?? {}),
+    }),
 
   chat: (message: string) =>
     apiCall<{

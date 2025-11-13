@@ -11,10 +11,27 @@ import { motion } from 'framer-motion';
 
 export default function Goals() {
   const [budget, setBudget] = useState({
+    month: new Date().getMonth() + 1,
+    year: new Date().getFullYear(),
     monthlyBudget: 0,
-    savingsGoal: 15000,
+    savingsGoal: 0,
+    spent: 0,
+    remaining: 0,
+    percentageUsed: 0,
+    dailyBudget: 0,
+    status: '',
+    daysRemaining: 0,
     categoryBudgets: {} as Record<string, number>,
   });
+  const [profile, setProfile] = useState<{
+    uid: string;
+    email: string;
+    name: string;
+    currency: string;
+    monthlyBudget: number;
+    savingsGoal: number;
+    preferences?: any;
+  } | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     monthlyBudget: '',
@@ -32,15 +49,43 @@ export default function Goals() {
   const fetchBudget = async () => {
     try {
       const currentDate = new Date();
-      const data = await userAPI.getBudget(currentDate.getMonth() + 1, currentDate.getFullYear());
-      setBudget(data);
+      const [budgetData, profileData] = await Promise.all([
+        userAPI.getBudget(currentDate.getMonth() + 1, currentDate.getFullYear()),
+        userAPI.getProfile(),
+      ]);
+
+      setProfile(profileData);
+
+      const categoryBudgets = Array.isArray(budgetData?.categoryBreakdown)
+        ? budgetData.categoryBreakdown.reduce((acc, item) => {
+            if (item?.category) {
+              acc[item.category] = item.amount ?? 0;
+            }
+            return acc;
+          }, {} as Record<string, number>)
+        : {};
+      const normalizedBudget = {
+        month: budgetData?.period?.month ?? profileData?.preferences?.defaultBudgetMonth ?? currentDate.getMonth() + 1,
+        year: budgetData?.period?.year ?? profileData?.preferences?.defaultBudgetYear ?? currentDate.getFullYear(),
+        monthlyBudget: profileData?.monthlyBudget ?? budgetData?.budget?.monthly ?? 0,
+        savingsGoal: profileData?.savingsGoal ?? 0,
+        spent: budgetData?.budget?.spent ?? 0,
+        remaining: budgetData?.budget?.remaining ?? 0,
+        percentageUsed: budgetData?.budget?.percentageUsed ?? 0,
+        dailyBudget: budgetData?.budget?.dailyBudget ?? 0,
+        status: budgetData?.budget?.status ?? '',
+        daysRemaining: budgetData?.period?.daysRemaining ?? 0,
+        categoryBudgets,
+      };
+
+      setBudget(normalizedBudget);
       setFormData({
-        monthlyBudget: data.monthlyBudget?.toString() || '',
-        savingsGoal: data.savingsGoal?.toString() || '',
-        food: data.categoryBudgets?.Food?.toString() || '',
-        transport: data.categoryBudgets?.Transport?.toString() || '',
-        entertainment: data.categoryBudgets?.Entertainment?.toString() || '',
-        utilities: data.categoryBudgets?.Utilities?.toString() || '',
+        monthlyBudget: normalizedBudget.monthlyBudget ? normalizedBudget.monthlyBudget.toString() : '',
+        savingsGoal: normalizedBudget.savingsGoal ? normalizedBudget.savingsGoal.toString() : '',
+        food: categoryBudgets.Food ? categoryBudgets.Food.toString() : '',
+        transport: categoryBudgets.Transport ? categoryBudgets.Transport.toString() : '',
+        entertainment: categoryBudgets.Entertainment ? categoryBudgets.Entertainment.toString() : '',
+        utilities: categoryBudgets.Utilities ? categoryBudgets.Utilities.toString() : '',
       });
     } catch (error) {
       console.error('Failed to fetch budget:', error);
@@ -51,17 +96,34 @@ export default function Goals() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const updatedMonthlyBudget = parseFloat(formData.monthlyBudget) || 0;
+    const updatedSavingsGoal = parseFloat(formData.savingsGoal) || 0;
+
     try {
-      await userAPI.updateBudget({
-        monthlyBudget: parseFloat(formData.monthlyBudget),
-        savingsGoal: parseFloat(formData.savingsGoal),
-        categoryBudgets: {
-          Food: parseFloat(formData.food) || 0,
-          Transport: parseFloat(formData.transport) || 0,
-          Entertainment: parseFloat(formData.entertainment) || 0,
-          Utilities: parseFloat(formData.utilities) || 0,
-        },
-      });
+      const targetMonth = budget.month ?? new Date().getMonth() + 1;
+      const targetYear = budget.year ?? new Date().getFullYear();
+
+      await Promise.all([
+        userAPI.updateProfile({
+          name: profile?.name ?? '',
+          currency: profile?.currency ?? 'USD',
+          monthlyBudget: updatedMonthlyBudget,
+          savingsGoal: updatedSavingsGoal,
+          preferences: profile?.preferences ?? {},
+        }),
+        userAPI.updateBudget({
+          month: targetMonth,
+          year: targetYear,
+          monthlyBudget: updatedMonthlyBudget,
+          savingsGoal: updatedSavingsGoal,
+          categoryBudgets: {
+            Food: parseFloat(formData.food) || 0,
+            Transport: parseFloat(formData.transport) || 0,
+            Entertainment: parseFloat(formData.entertainment) || 0,
+            Utilities: parseFloat(formData.utilities) || 0,
+          },
+        }),
+      ]);
       toast.success('Budget updated successfully');
       setIsEditing(false);
       fetchBudget();
@@ -71,15 +133,19 @@ export default function Goals() {
     }
   };
 
+  const currency = profile?.currency ?? 'USD';
+
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat(undefined, {
       style: 'currency',
-      currency: 'USD',
+      currency,
     }).format(amount);
   };
 
   const currentSavings = 5420; // This should come from actual transaction data
-  const savingsProgress = (currentSavings / budget.savingsGoal) * 100;
+  const savingsProgress = budget.savingsGoal
+    ? (currentSavings / budget.savingsGoal) * 100
+    : 0;
 
   return (
     <DashboardLayout>
@@ -228,13 +294,50 @@ export default function Goals() {
             <>
               <Card>
                 <CardHeader>
-                  <CardTitle>Monthly Budget</CardTitle>
+                  <CardTitle>Your Targets</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Monthly Budget Target</span>
+                    <span className="font-semibold">{formatCurrency(budget.monthlyBudget)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Savings Goal</span>
+                    <span className="font-semibold">{formatCurrency(budget.savingsGoal)}</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Current Month Status</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {budget.daysRemaining} days remaining in this cycle
+                  </p>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-3xl font-bold">{formatCurrency(budget.monthlyBudget)}</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Your total monthly spending limit
-                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Spent</p>
+                      <p className="text-lg font-semibold">{formatCurrency(budget.spent)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Remaining</p>
+                      <p className="text-lg font-semibold">{formatCurrency(budget.remaining)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Daily Budget</p>
+                      <p className="text-lg font-semibold">{formatCurrency(budget.dailyBudget)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Usage</p>
+                      <p className="text-lg font-semibold">{budget.percentageUsed.toFixed(1)}%</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Status</p>
+                      <p className="text-lg font-semibold capitalize">{budget.status || 'n/a'}</p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -243,13 +346,13 @@ export default function Goals() {
                   <CardTitle>Category Budgets</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {Object.entries(budget.categoryBudgets).map(([category, amount]) => (
+                  {Object.entries(budget.categoryBudgets ?? {}).map(([category, amount]) => (
                     <div key={category} className="flex justify-between items-center">
                       <span className="text-sm">{category}</span>
                       <span className="font-semibold">{formatCurrency(amount)}</span>
                     </div>
                   ))}
-                  {Object.keys(budget.categoryBudgets).length === 0 && (
+                  {Object.keys(budget.categoryBudgets ?? {}).length === 0 && (
                     <p className="text-sm text-muted-foreground">
                       No category budgets set yet. Click Edit Goals to add some.
                     </p>

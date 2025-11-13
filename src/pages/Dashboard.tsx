@@ -3,6 +3,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { StatCard } from '@/components/StatCard';
 import { DollarSign, TrendingUp, TrendingDown, Target } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { transactionAPI, userAPI } from '@/lib/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import toast from 'react-hot-toast';
@@ -19,38 +20,149 @@ export default function Dashboard() {
   const [categoryData, setCategoryData] = useState<any[]>([]);
   const [monthlyData, setMonthlyData] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [timeframe, setTimeframe] = useState<'all_time' | 'today' | 'this_week' | 'this_month'>('this_month');
+  const [currency, setCurrency] = useState('USD');
+
+  const timeframeOptions: { label: string; value: typeof timeframe }[] = [
+    { label: 'All Time', value: 'all_time' },
+    { label: 'Today', value: 'today' },
+    { label: 'This Week', value: 'this_week' },
+    { label: 'This Month', value: 'this_month' },
+  ];
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    fetchDashboardData(timeframe);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeframe]);
 
-  const fetchDashboardData = async () => {
+  const getDateRange = (range: typeof timeframe) => {
+    const now = new Date();
+    const end = new Date(now);
+
+    switch (range) {
+      case 'today': {
+        const start = new Date(now);
+        start.setHours(0, 0, 0, 0);
+        return { startDate: start.toISOString(), endDate: end.toISOString() };
+      }
+      case 'this_week': {
+        const start = new Date(now);
+        const day = start.getDay();
+        const diff = start.getDate() - day + (day === 0 ? -6 : 1); // Monday as first day
+        start.setDate(diff);
+        start.setHours(0, 0, 0, 0);
+        return { startDate: start.toISOString(), endDate: end.toISOString() };
+      }
+      case 'this_month': {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        start.setHours(0, 0, 0, 0);
+        return { startDate: start.toISOString(), endDate: end.toISOString() };
+      }
+      default:
+        return {};
+    }
+  };
+
+  const buildChartData = (transactions: any[], range: typeof timeframe) => {
+    const buckets = new Map<
+      string,
+      {
+        label: string;
+        income: number;
+        expenses: number;
+        sortValue: number;
+      }
+    >();
+
+    transactions.forEach((transaction) => {
+      if (!transaction?.date) return;
+      const txDate = new Date(transaction.date);
+      if (Number.isNaN(txDate.getTime())) return;
+
+      let key: string;
+      let label: string;
+      let sortValue: number;
+
+      if (range === 'all_time') {
+        key = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`;
+        label = `${txDate.toLocaleString(undefined, { month: 'short' })} ${txDate.getFullYear()}`;
+        sortValue = new Date(txDate.getFullYear(), txDate.getMonth(), 1).getTime();
+      } else {
+        key = txDate.toISOString().split('T')[0];
+        label = txDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        sortValue = new Date(key).getTime();
+      }
+
+      const bucket = buckets.get(key) ?? { label, income: 0, expenses: 0, sortValue };
+      if (transaction.type === 'income') {
+        bucket.income += Number(transaction.amount) || 0;
+      } else if (transaction.type === 'expense') {
+        bucket.expenses += Number(transaction.amount) || 0;
+      }
+      buckets.set(key, bucket);
+    });
+
+    return Array.from(buckets.values())
+      .sort((a, b) => a.sortValue - b.sortValue)
+      .map(({ sortValue, ...rest }) => rest);
+  };
+
+  const fetchDashboardData = async (range: typeof timeframe) => {
     try {
-      // Fetch transactions
-      const transactionData = await transactionAPI.getAll({ limit: 100 });
-      
-      // Use summary from API response
-      const summary = transactionData.summary || {
-        totalIncome: 0,
-        totalExpenses: 0,
-        totalSavings: 0,
-        count: 0,
+      const dateRange = getDateRange(range);
+
+      const transactionParams: {
+        limit: number;
+        startDate?: string;
+        endDate?: string;
+      } = { limit: 500 };
+
+      if (dateRange.startDate) {
+        transactionParams.startDate = dateRange.startDate;
+      }
+      if (dateRange.endDate) {
+        transactionParams.endDate = dateRange.endDate;
+      }
+
+      const currentDate = new Date();
+
+      const [transactionData, budgetData, profileData] = await Promise.all([
+        transactionAPI.getAll(transactionParams),
+        userAPI.getBudget(currentDate.getMonth() + 1, currentDate.getFullYear()),
+        userAPI.getProfile(),
+      ]);
+
+      setCurrency(profileData?.currency ?? 'USD');
+
+      const transactions = transactionData.transactions || [];
+
+      const totals = transactions.reduce(
+        (acc, transaction) => {
+          const amount = Number(transaction.amount) || 0;
+          if (transaction.type === 'income') {
+            acc.income += amount;
+          } else if (transaction.type === 'expense') {
+            acc.expense += amount;
+          }
+          return acc;
+        },
+        { income: 0, expense: 0 }
+      );
+
+      const budgetInfo = {
+        monthly: budgetData?.budget?.monthly ?? profileData?.monthlyBudget ?? 0,
       };
 
-      // Fetch budget
-      const currentDate = new Date();
-      const budgetData = await userAPI.getBudget(currentDate.getMonth() + 1, currentDate.getFullYear());
-
       setStats({
-        totalIncome: summary.totalIncome,
-        totalExpenses: summary.totalExpenses,
-        savings: summary.totalIncome - summary.totalExpenses,
-        budget: budgetData.monthlyBudget || 0,
+        totalIncome: totals.income,
+        totalExpenses: totals.expense,
+        savings: totals.income - totals.expense,
+        budget: budgetInfo.monthly,
       });
 
-      // Prepare category chart data from transactions
+      // Prepare category chart data from filtered transactions
       const categoryMap: Record<string, number> = {};
-      transactionData.transactions?.forEach((t: any) => {
+      transactions.forEach((t: any) => {
         if (t.type === 'expense') {
           categoryMap[t.category] = (categoryMap[t.category] || 0) + t.amount;
         }
@@ -62,15 +174,7 @@ export default function Dashboard() {
       }));
       setCategoryData(categoryChartData);
 
-      // Prepare monthly data (demo data for now)
-      const monthlyChartData = [
-        { month: 'Jan', income: 4000, expenses: 2400 },
-        { month: 'Feb', income: 3000, expenses: 1398 },
-        { month: 'Mar', income: 2000, expenses: 9800 },
-        { month: 'Apr', income: 2780, expenses: 3908 },
-        { month: 'May', income: 1890, expenses: 4800 },
-        { month: 'Jun', income: 2390, expenses: 3800 },
-      ];
+      const monthlyChartData = buildChartData(transactions, range);
       setMonthlyData(monthlyChartData);
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
@@ -81,9 +185,9 @@ export default function Dashboard() {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat(undefined, {
       style: 'currency',
-      currency: 'USD',
+      currency,
     }).format(amount);
   };
 
@@ -103,9 +207,23 @@ export default function Dashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome back! Here's your financial overview.</p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <p className="text-muted-foreground">Welcome back! Here's your financial overview.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {timeframeOptions.map((option) => (
+              <Button
+                key={option.value}
+                variant={timeframe === option.value ? 'default' : 'outline'}
+                onClick={() => setTimeframe(option.value)}
+                size="sm"
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -143,7 +261,7 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
+                  <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" />
                   <YAxis stroke="hsl(var(--muted-foreground))" />
                   <Tooltip
                     contentStyle={{
