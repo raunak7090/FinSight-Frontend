@@ -22,7 +22,7 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
 
   return (
     <div className="h-16 border-b border-border bg-card px-4 sm:px-6 flex items-center justify-between gap-4">
-      <div className="flex items-center gap-4 flex-1 max-w-xl">
+      <div className="flex items-center gap-3 w-auto md:flex-1 md:max-w-xl">
         <Button
           variant="ghost"
           size="icon"
@@ -32,7 +32,7 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <div className="relative flex-1">
+        <div className="relative hidden md:block flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search transactions, categories..."
