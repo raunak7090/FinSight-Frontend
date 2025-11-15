@@ -1,11 +1,15 @@
-import { Bell, Search } from 'lucide-react';
+import { Bell, Menu, Search } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/theme-toggle';
 
-export function Navbar() {
+interface NavbarProps {
+  onToggleSidebar: () => void;
+}
+
+export function Navbar({ onToggleSidebar }: NavbarProps) {
   const { user } = useAuth();
 
   const getInitials = (name: string) => {
@@ -17,8 +21,17 @@ export function Navbar() {
   };
 
   return (
-    <div className="h-16 border-b border-border bg-card px-6 flex items-center justify-between">
+    <div className="h-16 border-b border-border bg-card px-4 sm:px-6 flex items-center justify-between gap-4">
       <div className="flex items-center gap-4 flex-1 max-w-xl">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="lg:hidden"
+          onClick={onToggleSidebar}
+          aria-label="Toggle sidebar"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input

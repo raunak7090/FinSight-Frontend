@@ -12,12 +12,16 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-screen w-full bg-background">
-      <Sidebar />
+    <div className="flex h-screen w-full bg-background overflow-hidden">
+      <Sidebar
+        isMobileOpen={isSidebarOpen}
+        onMobileClose={() => setIsSidebarOpen(false)}
+      />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Navbar />
+        <Navbar onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)} />
         <main className="flex-1 overflow-auto p-6">{children}</main>
       </div>
 
