@@ -161,6 +161,27 @@ export default function Dashboard() {
       .map(({ sortValue, ...rest }) => rest);
   };
 
+  const filterTransactionsByDate = (
+    txs: any[] = [],
+    range: { startDate?: string; endDate?: string } | null,
+  ) => {
+    if (!range?.startDate && !range?.endDate) {
+      return txs;
+    }
+
+    const start = range?.startDate ? new Date(range.startDate).getTime() : null;
+    const end = range?.endDate ? new Date(range.endDate).getTime() : null;
+
+    return txs.filter((transaction) => {
+      if (!transaction?.date) return false;
+      const txTime = new Date(transaction.date).getTime();
+      if (Number.isNaN(txTime)) return false;
+      if (start !== null && txTime < start) return false;
+      if (end !== null && txTime > end) return false;
+      return true;
+    });
+  };
+
   const fetchDashboardData = async (range: typeof timeframe) => {
     try {
       setIsLoading(true);
@@ -169,43 +190,14 @@ export default function Dashboard() {
       const dateRange = getDateRange(range);
       const previousDateRange = getPreviousDateRange(range);
 
-      const transactionParams: {
-        limit: number;
-        startDate?: string;
-        endDate?: string;
-      } = { limit: 500 };
-
-      if (dateRange.startDate) {
-        transactionParams.startDate = dateRange.startDate;
-      }
-      if (dateRange.endDate) {
-        transactionParams.endDate = dateRange.endDate;
-      }
+      const transactionParams = { limit: 500 } as const;
 
       const currentDate = new Date();
 
-      const previousTransactionParams = previousDateRange
-        ? {
-            limit: transactionParams.limit,
-            startDate: previousDateRange.startDate,
-            endDate: previousDateRange.endDate,
-          }
-        : null;
-
-      const previousTransactionsPromise = previousTransactionParams
-        ? transactionAPI
-            .getAll(previousTransactionParams)
-            .catch((error) => {
-              console.error('Failed to fetch previous transactions:', error);
-              return null;
-            })
-        : Promise.resolve(null);
-
-      const [transactionData, budgetData, profileData, previousTransactionData] = await Promise.all([
+      const [transactionData, budgetData, profileData] = await Promise.all([
         transactionAPI.getAll(transactionParams),
         userAPI.getBudget(currentDate.getMonth() + 1, currentDate.getFullYear()),
         userAPI.getProfile(),
-        previousTransactionsPromise,
       ]);
 
       const currencyCode = profileData?.currency ?? 'USD';
@@ -215,7 +207,8 @@ export default function Dashboard() {
         currency: currencyCode,
       });
 
-      const transactions = transactionData.transactions || [];
+      const allTransactions = transactionData.transactions || [];
+      const transactions = filterTransactionsByDate(allTransactions, dateRange);
 
       const totals = transactions.reduce(
         (acc, transaction) => {
@@ -230,7 +223,7 @@ export default function Dashboard() {
         { income: 0, expense: 0 }
       );
 
-      const previousTransactions = previousTransactionData?.transactions ?? [];
+      const previousTransactions = filterTransactionsByDate(allTransactions, previousDateRange);
       const previousTotals = previousTransactions.length
         ? previousTransactions.reduce(
             (acc, transaction) => {

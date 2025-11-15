@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
@@ -25,10 +25,27 @@ import { transactionAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { Badge } from '@/components/ui/badge';
 
+const DEFAULT_CATEGORY_OPTIONS = [
+  'Food',
+  'Transport',
+  'Entertainment',
+  'Utilities',
+  'Shopping',
+  'Healthcare',
+  'Education',
+  'Salary',
+  'Investment',
+] as const;
+
+type DefaultCategoryOption = (typeof DEFAULT_CATEGORY_OPTIONS)[number];
+type CategorySelectValue = DefaultCategoryOption | 'other';
+
 export default function Transactions() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedCategoryOption, setSelectedCategoryOption] = useState<CategorySelectValue>('other');
+  const [customCategory, setCustomCategory] = useState('');
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
   const [formData, setFormData] = useState({
     type: 'expense',
@@ -37,6 +54,16 @@ export default function Transactions() {
     description: '',
     date: new Date().toISOString().split('T')[0],
   });
+
+  const categorySelectOptions = useMemo(() => {
+    const unique = new Set<string>(DEFAULT_CATEGORY_OPTIONS);
+    transactions.forEach((transaction) => {
+      if (transaction?.category) {
+        unique.add(String(transaction.category));
+      }
+    });
+    return Array.from(unique).sort((a, b) => a.localeCompare(b));
+  }, [transactions]);
 
   useEffect(() => {
     fetchTransactions();
@@ -58,16 +85,31 @@ export default function Transactions() {
     e.preventDefault();
 
     try {
+      const categoryValue =
+        selectedCategoryOption === 'other' ? customCategory.trim() : selectedCategoryOption;
+
+      if (!categoryValue) {
+        toast.error('Please select a category');
+        return;
+      }
+
+      const amountValue = parseFloat(formData.amount);
+      if (Number.isNaN(amountValue) || amountValue <= 0) {
+        toast.error('Enter a valid amount greater than zero');
+        return;
+      }
+      const payload = {
+        ...formData,
+        amount: amountValue,
+        category: categoryValue,
+      };
+
       if (editingTransaction) {
-        await transactionAPI.update(editingTransaction.id, {
-          ...formData,
-          amount: parseFloat(formData.amount),
-        });
+        await transactionAPI.update(editingTransaction.id, payload);
         toast.success('Transaction updated successfully');
       } else {
         await transactionAPI.create({
-          ...formData,
-          amount: parseFloat(formData.amount),
+          ...payload,
           tags: [],
           recurring: false,
         });
@@ -76,6 +118,8 @@ export default function Transactions() {
 
       setIsDialogOpen(false);
       setEditingTransaction(null);
+      setSelectedCategoryOption('other');
+      setCustomCategory('');
       setFormData({
         type: 'expense',
         amount: '',
@@ -86,16 +130,26 @@ export default function Transactions() {
       fetchTransactions();
     } catch (error) {
       console.error('Failed to save transaction:', error);
-      toast.error('Failed to save transaction');
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to save transaction. Please try again.';
+      toast.error(errorMessage);
     }
   };
 
   const handleEdit = (transaction: any) => {
     setEditingTransaction(transaction);
+    const normalizedCategory = (transaction.category ?? '').toString();
+    const matchedOption = categorySelectOptions.find(
+      (option) => option.toLowerCase() === normalizedCategory.toLowerCase(),
+    );
+
+    setSelectedCategoryOption((matchedOption as CategorySelectValue) ?? 'other');
+    setCustomCategory(matchedOption ? '' : normalizedCategory);
+
     setFormData({
       type: transaction.type,
       amount: transaction.amount.toString(),
-      category: transaction.category,
+      category: matchedOption ?? normalizedCategory,
       description: transaction.description,
       date: transaction.date,
     });
@@ -135,6 +189,8 @@ export default function Transactions() {
             <DialogTrigger asChild>
               <Button onClick={() => {
                 setEditingTransaction(null);
+                setSelectedCategoryOption('other');
+                setCustomCategory('');
                 setFormData({
                   type: 'expense',
                   amount: '',
@@ -189,14 +245,49 @@ export default function Transactions() {
 
                 <div className="space-y-2">
                   <Label htmlFor="category">Category</Label>
-                  <Input
-                    id="category"
-                    placeholder="e.g., Food, Transport"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    required
-                  />
+                  <Select
+                    value={selectedCategoryOption}
+                    onValueChange={(value) => {
+                      const nextValue = value as CategorySelectValue;
+                      setSelectedCategoryOption(nextValue);
+                      if (nextValue === 'other') {
+                        setFormData((prev) => ({ ...prev, category: customCategory }));
+                      } else {
+                        setCustomCategory('');
+                        setFormData((prev) => ({ ...prev, category: nextValue }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categorySelectOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                {selectedCategoryOption === 'other' && (
+                  <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="customCategory">Custom Category</Label>
+                    <Input
+                      id="customCategory"
+                      placeholder="Enter category name"
+                      value={customCategory}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setCustomCategory(value);
+                        setFormData((prev) => ({ ...prev, category: value }));
+                      }}
+                      required
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="description">Description</Label>

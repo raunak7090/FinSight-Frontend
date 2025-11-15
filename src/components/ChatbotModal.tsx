@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { X, Send, Loader2, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,7 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
   const [conversationHistory, setConversationHistory] = useState<AIConversationEntry[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const markdownPlugins = useMemo(() => [remarkGfm as unknown as never], []);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -90,13 +91,13 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
             onClick={onClose}
           />
           <motion.div
-            initial={{ opacity: 0, x: 400, y: 400, scale: 0.5 }}
-            animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 400, y: 400, scale: 0.5 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="fixed bottom-6 right-6 w-[460px] h-[680px] bg-card rounded-2xl shadow-glow border border-border z-50 flex flex-col"
+            initial={{ opacity: 0, y: 32, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 32, scale: 0.95 }}
+            transition={{ type: 'spring', damping: 24, stiffness: 260 }}
+            className="fixed inset-4 sm:inset-auto sm:bottom-6 sm:right-6 z-50 flex h-[calc(100vh-2rem)] sm:h-[680px] w-auto sm:w-[460px] max-w-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-glow"
           >
-            <div className="p-4 border-b border-border flex items-center justify-between bg-gradient-primary rounded-t-2xl">
+            <div className="border-b border-border bg-gradient-primary px-5 py-4 sm:px-6 sm:py-5 flex items-center justify-between rounded-t-2xl">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-white/10 rounded-lg">
                   <Sparkles className="h-5 w-5 text-white" />
@@ -116,7 +117,7 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
               </Button>
             </div>
 
-            <ScrollArea className="flex-1 p-6" ref={scrollRef}>
+            <ScrollArea className="flex-1 px-4 py-5 sm:px-6 sm:py-6" ref={scrollRef}>
               <div className="space-y-4">
                 {messages.map((message) => (
                   <motion.div
@@ -126,7 +127,7 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
                     className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                      className={`max-w-[85%] sm:max-w-[80%] rounded-2xl px-4 py-3 ${
                         message.role === 'user'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted text-foreground'
@@ -134,7 +135,7 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
                     >
                       {message.role === 'assistant' ? (
                         <ReactMarkdown
-                          
+                          remarkPlugins={markdownPlugins}
                           className="prose prose-sm max-w-none text-foreground dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground prose-li:marker:text-muted-foreground"
                         >
                           {message.content}
@@ -155,8 +156,8 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
               </div>
             </ScrollArea>
 
-            <div className="p-4 border-t border-border">
-              <div className="flex gap-2">
+            <div className="border-t border-border px-4 py-4 sm:px-6">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
                   placeholder="Ask about your finances..."
                   value={input}
@@ -165,8 +166,13 @@ export function ChatbotModal({ isOpen, onClose }: ChatbotModalProps) {
                   disabled={isLoading}
                   className="flex-1"
                 />
-                <Button onClick={handleSend} disabled={isLoading || !input.trim()} size="icon">
-                  <Send className="h-4 w-4" />
+                <Button
+                  onClick={handleSend}
+                  disabled={isLoading || !input.trim()}
+                  size="icon"
+                  className="h-11 w-full sm:h-10 sm:w-10"
+                >
+                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
