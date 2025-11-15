@@ -10,6 +10,11 @@ import toast from 'react-hot-toast';
 
 const COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
+type TrendInfo = {
+  value: string;
+  isPositive: boolean;
+};
+
 export default function Dashboard() {
   const [stats, setStats] = useState({
     totalIncome: 0,
@@ -22,6 +27,12 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [timeframe, setTimeframe] = useState<'all_time' | 'today' | 'this_week' | 'this_month'>('this_month');
   const [currency, setCurrency] = useState('USD');
+  const [statTrends, setStatTrends] = useState<{
+    income?: TrendInfo;
+    expenses?: TrendInfo;
+    savings?: TrendInfo;
+    budget?: TrendInfo;
+  }>({});
 
   const timeframeOptions: { label: string; value: typeof timeframe }[] = [
     { label: 'All Time', value: 'all_time' },
@@ -60,6 +71,49 @@ export default function Dashboard() {
       }
       default:
         return {};
+    }
+  };
+
+  const getPreviousDateRange = (range: typeof timeframe) => {
+    const now = new Date();
+
+    switch (range) {
+      case 'today': {
+        const start = new Date(now);
+        start.setDate(start.getDate() - 1);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(start);
+        end.setHours(23, 59, 59, 999);
+        return { startDate: start.toISOString(), endDate: end.toISOString() };
+      }
+      case 'this_week': {
+        const currentWeekStart = new Date(now);
+        const day = currentWeekStart.getDay();
+        const diff = currentWeekStart.getDate() - day + (day === 0 ? -6 : 1);
+        currentWeekStart.setDate(diff);
+        currentWeekStart.setHours(0, 0, 0, 0);
+
+        const previousWeekStart = new Date(currentWeekStart);
+        previousWeekStart.setDate(previousWeekStart.getDate() - 7);
+
+        const previousWeekEnd = new Date(previousWeekStart);
+        previousWeekEnd.setDate(previousWeekEnd.getDate() + 6);
+        previousWeekEnd.setHours(23, 59, 59, 999);
+
+        return {
+          startDate: previousWeekStart.toISOString(),
+          endDate: previousWeekEnd.toISOString(),
+        };
+      }
+      case 'this_month': {
+        const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(now.getFullYear(), now.getMonth(), 0);
+        end.setHours(23, 59, 59, 999);
+        return { startDate: start.toISOString(), endDate: end.toISOString() };
+      }
+      default:
+        return null;
     }
   };
 
@@ -109,7 +163,11 @@ export default function Dashboard() {
 
   const fetchDashboardData = async (range: typeof timeframe) => {
     try {
+      setIsLoading(true);
+      setStatTrends({});
+
       const dateRange = getDateRange(range);
+      const previousDateRange = getPreviousDateRange(range);
 
       const transactionParams: {
         limit: number;
@@ -126,13 +184,36 @@ export default function Dashboard() {
 
       const currentDate = new Date();
 
-      const [transactionData, budgetData, profileData] = await Promise.all([
+      const previousTransactionParams = previousDateRange
+        ? {
+            limit: transactionParams.limit,
+            startDate: previousDateRange.startDate,
+            endDate: previousDateRange.endDate,
+          }
+        : null;
+
+      const previousTransactionsPromise = previousTransactionParams
+        ? transactionAPI
+            .getAll(previousTransactionParams)
+            .catch((error) => {
+              console.error('Failed to fetch previous transactions:', error);
+              return null;
+            })
+        : Promise.resolve(null);
+
+      const [transactionData, budgetData, profileData, previousTransactionData] = await Promise.all([
         transactionAPI.getAll(transactionParams),
         userAPI.getBudget(currentDate.getMonth() + 1, currentDate.getFullYear()),
         userAPI.getProfile(),
+        previousTransactionsPromise,
       ]);
 
-      setCurrency(profileData?.currency ?? 'USD');
+      const currencyCode = profileData?.currency ?? 'USD';
+      setCurrency(currencyCode);
+      const currencyFormatter = new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: currencyCode,
+      });
 
       const transactions = transactionData.transactions || [];
 
@@ -149,15 +230,53 @@ export default function Dashboard() {
         { income: 0, expense: 0 }
       );
 
+      const previousTransactions = previousTransactionData?.transactions ?? [];
+      const previousTotals = previousTransactions.length
+        ? previousTransactions.reduce(
+            (acc, transaction) => {
+              const amount = Number(transaction.amount) || 0;
+              if (transaction.type === 'income') {
+                acc.income += amount;
+              } else if (transaction.type === 'expense') {
+                acc.expense += amount;
+              }
+              return acc;
+            },
+            { income: 0, expense: 0 }
+          )
+        : { income: 0, expense: 0 };
+
       const budgetInfo = {
         monthly: budgetData?.budget?.monthly ?? profileData?.monthlyBudget ?? 0,
       };
+
+      const budgetRemaining = typeof budgetData?.budget?.remaining === 'number'
+        ? budgetData.budget.remaining
+        : budgetInfo.monthly - totals.expense;
 
       setStats({
         totalIncome: totals.income,
         totalExpenses: totals.expense,
         savings: totals.income - totals.expense,
         budget: budgetInfo.monthly,
+      });
+
+      const formatTrendDelta = (diff: number): TrendInfo => {
+        const formatted = currencyFormatter.format(Math.abs(diff));
+        const value = diff < 0 ? `-${formatted}` : formatted;
+        return {
+          value,
+          isPositive: diff >= 0,
+        };
+      };
+
+      setStatTrends({
+        income: formatTrendDelta(totals.income - previousTotals.income),
+        expenses: formatTrendDelta(previousTotals.expense - totals.expense),
+        savings: formatTrendDelta(
+          totals.income - totals.expense - (previousTotals.income - previousTotals.expense)
+        ),
+        budget: formatTrendDelta(budgetRemaining),
       });
 
       // Prepare category chart data from filtered transactions
@@ -240,25 +359,25 @@ export default function Dashboard() {
             title="Total Income"
             value={formatCurrency(stats.totalIncome)}
             icon={DollarSign}
-            trend={{ value: '12.5%', isPositive: true }}
+            trend={statTrends.income}
           />
           <StatCard
             title="Total Expenses"
             value={formatCurrency(stats.totalExpenses)}
             icon={TrendingDown}
-            trend={{ value: '8.2%', isPositive: false }}
+            trend={statTrends.expenses}
           />
           <StatCard
             title="Total Savings"
             value={formatCurrency(stats.savings)}
             icon={TrendingUp}
-            trend={{ value: '23.1%', isPositive: true }}
+            trend={statTrends.savings}
           />
           <StatCard
             title="Monthly Budget"
             value={formatCurrency(stats.budget)}
             icon={Target}
-            trend={{ value: '0%', isPositive: true }}
+            trend={statTrends.budget}
           />
         </div>
 
