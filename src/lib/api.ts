@@ -1,8 +1,7 @@
 // API configuration and helper functions
 // Get API base URL from environment variable or use localhost as default
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
-
-console.log('API Base URL:', API_BASE_URL);
+const FIREBASE_API_KEY = import.meta.env.VITE_FIREBASE_API_KEY;
 
 // Standard API response envelope
 interface ApiResponse<T = any> {
@@ -28,13 +27,75 @@ export const removeAuthToken = (): void => {
   localStorage.removeItem('authToken');
 };
 
+const getRefreshToken = (): string | null => {
+  return localStorage.getItem('refreshToken');
+};
+
+export const setRefreshToken = (token: string): void => {
+  localStorage.setItem('refreshToken', token);
+};
+
+export const removeRefreshToken = (): void => {
+  localStorage.removeItem('refreshToken');
+};
+
+async function refreshAuthToken(): Promise<boolean> {
+  const storedRefreshToken = getRefreshToken();
+
+  if (!storedRefreshToken || !FIREBASE_API_KEY) {
+    return false;
+  }
+
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: storedRefreshToken,
+  });
+
+  try {
+    const response = await fetch(
+      `https://securetoken.googleapis.com/v1/token?key=${FIREBASE_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body,
+      }
+    );
+
+    if (!response.ok) {
+      removeAuthToken();
+      removeRefreshToken();
+      return false;
+    }
+
+    const data = await response.json();
+
+    if (!data.id_token || !data.refresh_token) {
+      removeAuthToken();
+      removeRefreshToken();
+      return false;
+    }
+
+    setAuthToken(data.id_token);
+    setRefreshToken(data.refresh_token);
+
+    return true;
+  } catch {
+    removeAuthToken();
+    removeRefreshToken();
+    return false;
+  }
+}
+
 // Generic API call wrapper with auth
 async function apiCall<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  canRetry: boolean = true
 ): Promise<T> {
   const token = getAuthToken();
-  
+
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...options.headers,
@@ -55,12 +116,20 @@ async function apiCall<T>(
     if (!response.ok || !data.success) {
       // Handle specific error cases
       if (response.status === 401) {
-        // Token expired or invalid - clear auth
+        if (canRetry) {
+          const refreshed = await refreshAuthToken();
+
+          if (refreshed) {
+            return await apiCall<T>(endpoint, options, false);
+          }
+        }
+
         removeAuthToken();
+        removeRefreshToken();
         localStorage.removeItem('user');
         throw new Error('Session expired. Please login again.');
       }
-      
+
       throw new Error(data.message || `HTTP error! status: ${response.status}`);
     }
 
@@ -98,6 +167,10 @@ export const authAPI = {
     if (response.idToken) {
       setAuthToken(response.idToken);
     }
+
+    if (response.refreshToken) {
+      setRefreshToken(response.refreshToken);
+    }
     
     return {
       token: response.idToken,
@@ -132,6 +205,7 @@ export const authAPI = {
       console.error('Logout error:', error);
     } finally {
       removeAuthToken();
+      removeRefreshToken();
       localStorage.removeItem('user');
     }
   },
